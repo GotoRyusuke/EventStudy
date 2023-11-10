@@ -30,18 +30,17 @@ class EventStudy:
     def __init__(
             self,
             evt_panel_dir,
-            stock_data,
-            market_data,
+            data_dir,
             est_period=(None, None),
             evt_window=3,
             rolling=True,
             rolling_window=(-65, -2),
             gen_returns=False,
             ):
-        self.stock_data = stock_data.set_index('date')
-        self.market_data = market_data.set_index('date')
-        self.full_period = stock_data['date'].to_list()
+        self.data = pd.read_excel(data_dir)
+        self.full_period = self.data['date'].to_list()
         self.evt_panel = pd.read_csv(evt_panel_dir)
+        self.rolling = rolling
         
         # preparation for estimation
         # if est_period is not None, then use est_period as estimation period
@@ -60,15 +59,13 @@ class EventStudy:
         # preparation for returns
         # if gen_returns is True, then generate returns from stock_data and market_data
         if gen_returns:
-            self.stock_returns = EventUtils.gen_daily_returns(self.stock_data)
-            self.market_returns = EventUtils.gen_daily_returns(self.market_data)
+            self.returns = EventUtils.gen_daily_returns(self.data)
         else:
-            self.stock_returns = stock_data.set_index('date')
-            self.market_returns = market_data.set_index('date')
+            self.returns = self.data.set_index('date')
     
     def gen_car(self, tic, evt_date):
-        stock_returns = self.stock_returns[tic]
-        market_returns = self.market_returns
+        stock_returns = self.returns[tic]
+        market_returns = self.returns['market']
 
         if evt_date not in self.full_period:
             while evt_date not in self.full_period:
@@ -81,6 +78,7 @@ class EventStudy:
         evt_end = self.full_period[
             self.full_period.index(evt_date) + int((self.evt_window -1) / 2) 
             ]
+            
         # print(evt_start)
         # print(evt_end)
         
@@ -88,12 +86,16 @@ class EventStudy:
         #      Estimation (63 days)  Event (window days)
         # |-----------------------|----|---------|
         # est_start         est_end  evt_start evt_end
-        est_start = self.full_period[
-            self.full_period.index(evt_date) + self.est_start + 1
-        ]
-        est_end = self.full_period[
-            self.full_period.index(evt_date) + self.est_end
-        ]
+        if self.rolling:
+            est_start = self.full_period[
+                self.full_period.index(evt_date) + self.est_start + 1
+            ]
+            est_end = self.full_period[
+                self.full_period.index(evt_date) + self.est_end
+            ]
+        else:
+            est_start = self.est_start
+            est_end = self.est_end
         # print(est_start)
         # print(est_end)
 
@@ -128,7 +130,7 @@ class EventStudy:
     
     def run(self):
         tic_list = list(self.evt_panel['tic'].unique())
-        tic_list = [tic for tic in tic_list if tic in self.stock_data.columns]
+        tic_list = [tic for tic in tic_list if tic in self.data.columns if tic != 'market']
         tic_car_df_list = []
         
         for tic in tqdm(tic_list):
